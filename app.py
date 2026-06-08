@@ -185,6 +185,32 @@ st.markdown(
       font-size: 0.85rem;
       font-weight: 700;
     }
+
+    .footer-card {
+      margin: 1.5rem 0 0.5rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      background: rgba(8, 16, 31, 0.86);
+      color: #e9f2ff;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .footer-card .title {
+      display: block;
+      margin-bottom: 0.45rem;
+      color: #5be7c4;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .footer-card .names {
+      font-size: 0.98rem;
+      color: #d8e5f7;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -398,29 +424,29 @@ def run_solver(start_state: list[int], strategy: str, heuristic: str) -> dict:
   if shutil.which(SWIPL) is None and not Path(SWIPL).exists():
     return python_solution(start_state, strategy, heuristic)
 
-    query = (
-        f"gui_solution({prolog_list(start_state)}, {strategy}, {heuristic}, Payload), "
-        "json_write_dict(current_output, Payload, [width(0)])"
-    )
+  query = (
+    f"gui_solution({prolog_list(start_state)}, {strategy}, {heuristic}, Payload), "
+    "json_write_dict(current_output, Payload, [width(0)])"
+  )
   command = [SWIPL, "-q", "-s", str(PROLOG_FILE), "-g", query, "-t", "halt"]
   try:
     completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, check=False)
   except FileNotFoundError:
     return python_solution(start_state, strategy, heuristic)
-    if completed.returncode != 0:
-        message = (completed.stderr or completed.stdout or "Unknown solver error").strip()
+  if completed.returncode != 0:
+    message = (completed.stderr or completed.stdout or "Unknown solver error").strip()
     if "No such file or directory" in message or "cannot find the file" in message.lower():
       return python_solution(start_state, strategy, heuristic)
     return {"ok": False, "error": message}
 
-    output = completed.stdout.strip()
-    if not output:
-        return {"ok": False, "error": "The solver returned no output."}
+  output = completed.stdout.strip()
+  if not output:
+    return {"ok": False, "error": "The solver returned no output."}
 
-    try:
-        return json.loads(output)
-    except json.JSONDecodeError:
-        return {"ok": False, "error": output}
+  try:
+    return json.loads(output)
+  except json.JSONDecodeError:
+    return {"ok": False, "error": output}
 
 
 if "start_state" not in st.session_state:
@@ -973,3 +999,13 @@ else:
         board_html = board_html.replace("__PLAYBACK_SPEED__", str(playback_speed))
         board_html = board_html.replace("__AUTO_RUN__", str(auto_run).lower())
         components_html(board_html, height=animation_height, scrolling=False)
+
+st.markdown(
+    """
+    <div class="footer-card">
+      <span class="title">Developed and designed by</span>
+      <span class="names">1. Aaquib Alam, 2. Ashraf Ali, 3. Asish Sharma, 4. Pratap Singh</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
