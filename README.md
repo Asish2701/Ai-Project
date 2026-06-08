@@ -64,6 +64,9 @@ The GUI includes:
 - BFS, DFS, and A* controls
 - Step-by-step tile playback with play, pause, previous, and next controls
 - A timeline for jumping directly to any board state
+- A built-in Python fallback when SWI-Prolog is not installed, which is useful for Streamlit Cloud deployments
+
+If you want the app to use a local SWI-Prolog installation, set `SWIPL_PATH` to the executable path before launching Streamlit.
 
 ## Result Shape
 

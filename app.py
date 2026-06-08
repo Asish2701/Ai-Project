@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import heapq
 import json
+import os
 import re
+import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import streamlit as st
 from streamlit.components.v1 import html as components_html
 
 ROOT = Path(__file__).resolve().parent
-SWIPL = r"C:\Program Files\swipl\bin\swipl.exe"
+SWIPL = os.environ.get("SWIPL_PATH", r"C:\Program Files\swipl\bin\swipl.exe")
 PROLOG_FILE = ROOT / "eight_puzzle.pl"
 
 PRESETS = {
@@ -200,16 +204,214 @@ def prolog_list(values: list[int]) -> str:
     return "[" + ",".join(str(value) for value in values) + "]"
 
 
+def state_key(state: list[int]) -> tuple[int, ...]:
+  return tuple(state)
+
+
+def goal_state() -> list[int]:
+  return [1, 2, 3, 4, 5, 6, 7, 8, 0]
+
+
+def solvable_pair_python(start_state: list[int], goal_state_values: list[int]) -> bool:
+  def inversion_count(values: list[int]) -> int:
+    tiles = [value for value in values if value != 0]
+    total = 0
+    for index, tile in enumerate(tiles):
+      total += sum(1 for other in tiles[index + 1 :] if tile > other)
+    return total
+
+  return (inversion_count(start_state) - inversion_count(goal_state_values)) % 2 == 0
+
+
+def blank_moves(index: int) -> list[int]:
+  row, col = divmod(index, 3)
+  moves: list[int] = []
+  if row > 0:
+    moves.append(index - 3)
+  if row < 2:
+    moves.append(index + 3)
+  if col > 0:
+    moves.append(index - 1)
+  if col < 2:
+    moves.append(index + 1)
+  return moves
+
+
+def swap_indices(state: list[int], first: int, second: int) -> list[int]:
+  next_state = state.copy()
+  next_state[first], next_state[second] = next_state[second], next_state[first]
+  return next_state
+
+
+def manhattan_distance_python(state: list[int]) -> int:
+  distance = 0
+  for index, tile in enumerate(state):
+    if tile == 0:
+      continue
+    goal_index = tile - 1
+    row, col = divmod(index, 3)
+    goal_row, goal_col = divmod(goal_index, 3)
+    distance += abs(row - goal_row) + abs(col - goal_col)
+  return distance
+
+
+def misplaced_tiles_python(state: list[int]) -> int:
+  goal = goal_state()
+  return sum(1 for index, tile in enumerate(state) if tile != 0 and tile != goal[index])
+
+
+def heuristic_value_python(heuristic: str, state: list[int]) -> int:
+  if heuristic == "misplaced":
+    return misplaced_tiles_python(state)
+  return manhattan_distance_python(state)
+
+
+def reconstruct_path_python(parents: dict[tuple[int, ...], tuple[int, ...] | None], end_state: tuple[int, ...]) -> list[list[int]]:
+  path: list[list[int]] = []
+  current: tuple[int, ...] | None = end_state
+  while current is not None:
+    path.append(list(current))
+    current = parents[current]
+  path.reverse()
+  return path
+
+
+def solve_bfs_python(start_state: list[int], goal_state_values: list[int]) -> tuple[list[list[int]], int]:
+  start = state_key(start_state)
+  goal = state_key(goal_state_values)
+  queue = [start]
+  parents: dict[tuple[int, ...], tuple[int, ...] | None] = {start: None}
+  visited = {start}
+  expanded = 0
+
+  while queue:
+    current = queue.pop(0)
+    expanded += 1
+    if current == goal:
+      return reconstruct_path_python(parents, current), expanded
+
+    blank_index = current.index(0)
+    for move_index in blank_moves(blank_index):
+      next_state = state_key(swap_indices(list(current), blank_index, move_index))
+      if next_state in visited:
+        continue
+      visited.add(next_state)
+      parents[next_state] = current
+      queue.append(next_state)
+
+  raise ValueError("No solution found.")
+
+
+def solve_dfs_python(start_state: list[int], goal_state_values: list[int]) -> tuple[list[list[int]], int]:
+  start = state_key(start_state)
+  goal = state_key(goal_state_values)
+  stack = [start]
+  parents: dict[tuple[int, ...], tuple[int, ...] | None] = {start: None}
+  visited = {start}
+  expanded = 0
+
+  while stack:
+    current = stack.pop()
+    expanded += 1
+    if current == goal:
+      return reconstruct_path_python(parents, current), expanded
+
+    blank_index = current.index(0)
+    next_states = []
+    for move_index in blank_moves(blank_index):
+      next_state = state_key(swap_indices(list(current), blank_index, move_index))
+      if next_state in visited:
+        continue
+      visited.add(next_state)
+      parents[next_state] = current
+      next_states.append(next_state)
+    stack.extend(reversed(next_states))
+
+  raise ValueError("No solution found.")
+
+
+def solve_astar_python(start_state: list[int], goal_state_values: list[int], heuristic: str) -> tuple[list[list[int]], int]:
+  start = state_key(start_state)
+  goal = state_key(goal_state_values)
+  open_heap: list[tuple[int, int, tuple[int, ...]]] = []
+  heapq.heappush(open_heap, (heuristic_value_python(heuristic, start_state), 0, start))
+  parents: dict[tuple[int, ...], tuple[int, ...] | None] = {start: None}
+  g_scores: dict[tuple[int, ...], int] = {start: 0}
+  closed: set[tuple[int, ...]] = set()
+  counter = 1
+  expanded = 0
+
+  while open_heap:
+    f_score, g_score, current = heapq.heappop(open_heap)
+    if current in closed:
+      continue
+    closed.add(current)
+    expanded += 1
+
+    if current == goal:
+      return reconstruct_path_python(parents, current), expanded
+
+    blank_index = current.index(0)
+    for move_index in blank_moves(blank_index):
+      next_state_list = swap_indices(list(current), blank_index, move_index)
+      next_state = state_key(next_state_list)
+      tentative_g = g_score + 1
+      if tentative_g >= g_scores.get(next_state, float("inf")):
+        continue
+      g_scores[next_state] = tentative_g
+      parents[next_state] = current
+      h_score = heuristic_value_python(heuristic, next_state_list)
+      heapq.heappush(open_heap, (tentative_g + h_score, counter, next_state))
+      counter += 1
+
+  raise ValueError("No solution found.")
+
+
+def python_solution(start_state: list[int], strategy: str, heuristic: str) -> dict:
+  goal = goal_state()
+  if not solvable_pair_python(start_state, goal):
+    return {"ok": False, "error": "The selected puzzle is not solvable."}
+
+  started_at = time.perf_counter()
+  if strategy == "bfs":
+    path, expanded = solve_bfs_python(start_state, goal)
+  elif strategy == "dfs":
+    path, expanded = solve_dfs_python(start_state, goal)
+  else:
+    path, expanded = solve_astar_python(start_state, goal, heuristic)
+  runtime_ms = int((time.perf_counter() - started_at) * 1000)
+  moves = max(0, len(path) - 1)
+  return {
+    "ok": True,
+    "start": start_state,
+    "goal": goal,
+    "strategy": strategy,
+    "heuristic": heuristic,
+    "result": {
+      "path": path,
+      "stats": {"moves": moves, "expanded": expanded, "runtime_ms": runtime_ms},
+    },
+  }
+
+
 def run_solver(start_state: list[int], strategy: str, heuristic: str) -> dict:
+  if shutil.which(SWIPL) is None and not Path(SWIPL).exists():
+    return python_solution(start_state, strategy, heuristic)
+
     query = (
         f"gui_solution({prolog_list(start_state)}, {strategy}, {heuristic}, Payload), "
         "json_write_dict(current_output, Payload, [width(0)])"
     )
-    command = [SWIPL, "-q", "-s", str(PROLOG_FILE), "-g", query, "-t", "halt"]
-    completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+  command = [SWIPL, "-q", "-s", str(PROLOG_FILE), "-g", query, "-t", "halt"]
+  try:
+    completed = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, check=False)
+  except FileNotFoundError:
+    return python_solution(start_state, strategy, heuristic)
     if completed.returncode != 0:
         message = (completed.stderr or completed.stdout or "Unknown solver error").strip()
-        return {"ok": False, "error": message}
+    if "No such file or directory" in message or "cannot find the file" in message.lower():
+      return python_solution(start_state, strategy, heuristic)
+    return {"ok": False, "error": message}
 
     output = completed.stdout.strip()
     if not output:
