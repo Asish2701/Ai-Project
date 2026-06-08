@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run 8-puzzle comparison",
+      "type": "shell",
+      "command": "C:\\Program Files\\swipl\\bin\\swipl.exe",
+      "args": [
+        "-q",
+        "-s",
+        "eight_puzzle.pl",
+        "-g",
+        "compare_strategies(Results), writeln(Results), halt."
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

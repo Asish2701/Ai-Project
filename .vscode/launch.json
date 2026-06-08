@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Prolog: Run 8-puzzle comparison",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "C:\\Program Files\\swipl\\bin\\swipl.exe",
+      "args": [
+        "-q",
+        "-s",
+        "${workspaceFolder}\\eight_puzzle.pl",
+        "-g",
+        "compare_strategies(Results), writeln(Results), halt."
+      ]
+    }
+  ]
+}
